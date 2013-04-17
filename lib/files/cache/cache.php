@@ -109,7 +109,7 @@ class Cache {
 	 * @return array
 	 */
 	public function get($file) {
-		if (is_string($file) or $file == '') {
+		if (is_string($file) or $file === '') {
 			$where = 'WHERE `storage` = ? AND `path_hash` = ?';
 			$params = array($this->numericId, md5($file));
 		} else { //file id
@@ -298,7 +298,7 @@ class Cache {
 	 * @return bool
 	 */
 	public function inCache($file) {
-		return $this->getId($file) != -1;
+		return $this->getId($file) !== -1;
 	}
 
 	/**

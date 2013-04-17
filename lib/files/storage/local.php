@@ -40,7 +40,7 @@ class Local extends \OC\Files\Storage\Common{
 		return opendir($this->datadir.$path);
 	}
 	public function is_dir($path) {
-		if(substr($path, -1)=='/') {
+		if(substr($path, -1) === '/') {
 			$path=substr($path, 0, -1);
 		}
 		return is_dir($this->datadir.$path);
@@ -61,7 +61,7 @@ class Local extends \OC\Files\Storage\Common{
 	}
 	public function filetype($path) {
 		$filetype=filetype($this->datadir.$path);
-		if($filetype=='link') {
+		if($filetype === 'link') {
 			$filetype=filetype(realpath($this->datadir.$path));
 		}
 		return $filetype;
@@ -175,7 +175,7 @@ class Local extends \OC\Files\Storage\Common{
 		if (!file_exists($dir)) return true;
 		if (!is_dir($dir) || is_link($dir)) return unlink($dir);
 		foreach (scandir($dir) as $item) {
-			if ($item == '.' || $item == '..') continue;
+			if ($item === '.' || $item === '..') continue;
 			if(is_file($dir.'/'.$item)) {
 				if(unlink($dir.'/'.$item)) {
 				}
@@ -241,7 +241,7 @@ class Local extends \OC\Files\Storage\Common{
 	protected function searchInDir($query, $dir='') {
 		$files=array();
 		foreach (scandir($this->datadir.$dir) as $item) {
-			if ($item == '.' || $item == '..') continue;
+			if ($item === '.' || $item === '..') continue;
 			if(strstr(strtolower($item), strtolower($query))!==false) {
 				$files[]=$dir.'/'.$item;
 			}
