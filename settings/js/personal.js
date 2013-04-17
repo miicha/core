@@ -22,14 +22,14 @@ function changeEmailAddress(){
 
 $(document).ready(function(){
 	$("#passwordbutton").click( function(){
-		if ($('#pass1').val() != '' && $('#pass2').val() != '') {
+		if ($('#pass1').val() !== '' && $('#pass2').val() !== '') {
 			// Serialize the data
 			var post = $( "#passwordform" ).serialize();
 			$('#passwordchanged').hide();
 			$('#passworderror').hide();
 			// Ajax foo
 			$.post( 'ajax/changepassword.php', post, function(data){
-				if( data.status == "success" ){
+				if( data.status === "success" ){
 					$('#pass1').val('');
 					$('#pass2').val('');
 					$('#passwordchanged').show();
@@ -49,14 +49,14 @@ $(document).ready(function(){
 	});
 
 	$("#displaynamebutton").click( function(){
-		if ($('#displayName').val() != '' ) {
+		if ($('#displayName').val() !== '' ) {
 			// Serialize the data
 			var post = $( "#displaynameform" ).serialize();
 			$('#displaynamechanged').hide();
 			$('#displaynemerror').hide();
 			// Ajax foo
 			$.post( 'ajax/changedisplayname.php', post, function(data){
-				if( data.status == "success" ){
+				if( data.status === "success" ){
 					$('#displaynamechanged').show();
 					$('#oldDisplayName').text($('#displayName').val());
 					// update displayName on the top right expand button
@@ -92,7 +92,7 @@ $(document).ready(function(){
 		var post = $( "#languageinput" ).serialize();
 		// Ajax foo
 		$.post( 'ajax/setlanguage.php', post, function(data){
-			if( data.status == "success" ){
+			if( data.status === "success" ){
 				location.reload();
 			}
 			else{
@@ -113,7 +113,7 @@ OC.msg={
 			.show();
 	},
 	finishedSaving:function(selector, data){
-		if( data.status == "success" ){
+		if( data.status === "success" ){
 			 $(selector).html( data.data.message )
 				.addClass('success')
 				.stop(true, true)
