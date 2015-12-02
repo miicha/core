@@ -20,25 +20,33 @@
 *
 */
 
+/**
+ * Class Test_User_Database
+ *
+ * @group DB
+ */
 class Test_User_Database extends Test_User_Backend {
-	/**
-	 * get a new unique user name
-	 * test cases can override this in order to clean up created user
-	 * @return array
-	 */
+	/** @var array */
+	private $users;
+
 	public function getUser() {
-		$user=uniqid('test_');
+		$user = parent::getUser();
 		$this->users[]=$user;
 		return $user;
 	}
-	
-	public function setUp() {
-		$this->backend=new OC_User_Dummy();
+
+	protected function setUp() {
+		parent::setUp();
+		$this->backend=new OC_User_Database();
 	}
-	
-	public function tearDown() {
+
+	protected function tearDown() {
+		if(!isset($this->users)) {
+			return;
+		}
 		foreach($this->users as $user) {
 			$this->backend->deleteUser($user);
 		}
+		parent::tearDown();
 	}
 }

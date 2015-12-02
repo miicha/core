@@ -1,22 +1,28 @@
 <?php
 /**
- * ownCloud
+ * @author Björn Schießle <schiessle@owncloud.com>
+ * @author Joas Schilling <nickvergessen@owncloud.com>
+ * @author Michael Gapczynski <GapczynskiM@gmail.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Robin Appelman <icewind@owncloud.com>
+ * @author Roeland Jago Douma <rullzer@owncloud.com>
+ * @author Vincent Petry <pvince81@owncloud.com>
  *
- * @author Michael Gapczynski
- * @copyright 2013 Michael Gapczynski mtgap@owncloud.com
+ * @copyright Copyright (c) 2015, ownCloud, Inc.
+ * @license AGPL-3.0
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or any later version.
+ * This code is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
  *
- * This library is distributed in the hope that it will be useful,
+ * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU AFFERO GENERAL PUBLIC LICENSE for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Affero General Public
- * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License, version 3,
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ *
  */
 
 namespace OC\Files\Cache;
@@ -24,81 +30,141 @@ namespace OC\Files\Cache;
 class Shared_Updater {
 
 	/**
-	* Correct the parent folders' ETags for all users shared the file at $target
-	*
-	* @param string $target
-	*/
-	static public function correctFolders($target) {
-		$uid = \OCP\User::getUser();
-		$uidOwner = \OC\Files\Filesystem::getOwner($target);
-		$info = \OC\Files\Filesystem::getFileInfo($target);
-		// Correct Shared folders of other users shared with
-		$users = \OCP\Share::getUsersItemShared('file', $info['fileid'], $uidOwner, true);
-		if (!empty($users)) {
-			while (!empty($users)) {
-				$reshareUsers = array();
-				foreach ($users as $user) {
-					if ( $user !== $uidOwner ) {
-						$etag = \OC\Files\Filesystem::getETag('');
-						\OCP\Config::setUserValue($user, 'files_sharing', 'etag', $etag);
-						// Look for reshares
-						$reshareUsers = array_merge($reshareUsers, \OCP\Share::getUsersItemShared('file', $info['fileid'], $user, true));
-					}
-				}
-				$users = $reshareUsers;
+	 * Walk up the users file tree and update the etags.
+	 *
+	 * @param string $user user id
+	 * @param string $path share mount point path, relative to the user's "files" folder
+	 */
+	static private function correctUsersFolder($user, $path) {
+		// $path points to the mount point which is a virtual folder, so we start with
+		// the parent
+		$path = '/' . ltrim($path, '/');
+		$path = '/files' . dirname($path);
+		\OC\Files\Filesystem::initMountPoints($user);
+		$view = new \OC\Files\View('/' . $user);
+		if ($view->file_exists($path)) {
+			while ($path !== dirname($path)) {
+				$etag = $view->getETag($path);
+				$view->putFileInfo($path, array('etag' => $etag));
+				$path = dirname($path);
 			}
-			// Correct folders of shared file owner
-			$target = substr($target, 8);
-			if ($uidOwner !== $uid && $source = \OC_Share_Backend_File::getSource($target)) {
-				\OC\Files\Filesystem::initMountPoints($uidOwner);
-				$source = '/'.$uidOwner.'/'.$source['path'];
-				\OC\Files\Cache\Updater::correctFolder($source, $info['mtime']);
-			}
+		} else {
+			\OCP\Util::writeLog('files_sharing', 'can not update etags on ' . $path . ' for user ' . $user . '. Path does not exists', \OCP\Util::DEBUG);
 		}
 	}
 
 	/**
 	 * @param array $params
 	 */
-	static public function writeHook($params) {
-		self::correctFolders($params['path']);
-	}
-
-	/**
-	 * @param array $params
-	 */
 	static public function renameHook($params) {
-		self::correctFolders($params['newpath']);
-		self::correctFolders(pathinfo($params['oldpath'], PATHINFO_DIRNAME));
+		self::renameChildren($params['oldpath'], $params['newpath']);
 	}
 
 	/**
 	 * @param array $params
 	 */
 	static public function deleteHook($params) {
-		self::correctFolders($params['path']);
+		$path = $params['path'];
 	}
 
 	/**
+	 * update etags if a file was shared
 	 * @param array $params
 	 */
-	static public function shareHook($params) {
-		if ($params['itemType'] === 'file' || $params['itemType'] === 'folder') {
-			$uidOwner = \OCP\User::getUser();
-			$users = \OCP\Share::getUsersItemShared($params['itemType'], $params['fileSource'], $uidOwner, true);
-			if (!empty($users)) {
-				while (!empty($users)) {
-					$reshareUsers = array();
-					foreach ($users as $user) {
-						if ($user !== $uidOwner) {
-							$etag = \OC\Files\Filesystem::getETag('');
-							\OCP\Config::setUserValue($user, 'files_sharing', 'etag', $etag);
-							// Look for reshares
-							$reshareUsers = array_merge($reshareUsers, \OCP\Share::getUsersItemShared('file', $params['fileSource'], $user, true));
-						}
-					}
-					$users = $reshareUsers;
+	static public function postShareHook($params) {
+
+		if ($params['itemType'] === 'folder' || $params['itemType'] === 'file') {
+
+			$shareWith = $params['shareWith'];
+			$shareType = $params['shareType'];
+
+			if ($shareType === \OCP\Share::SHARE_TYPE_USER) {
+				self::correctUsersFolder($shareWith, $params['fileTarget']);
+			} elseif ($shareType === \OCP\Share::SHARE_TYPE_GROUP) {
+				foreach (\OC_Group::usersInGroup($shareWith) as $user) {
+					self::correctUsersFolder($user, $params['fileTarget']);
 				}
+			}
+		}
+	}
+
+	/**
+	 * update etags if a file was unshared
+	 *
+	 * @param array $params
+	 */
+	static public function postUnshareHook($params) {
+
+		// only update etags for file/folders shared to local users/groups
+		if (($params['itemType'] === 'file' || $params['itemType'] === 'folder') &&
+				$params['shareType'] !== \OCP\Share::SHARE_TYPE_LINK &&
+				$params['shareType'] !== \OCP\Share::SHARE_TYPE_REMOTE) {
+
+			$deletedShares = isset($params['deletedShares']) ? $params['deletedShares'] : array();
+
+			foreach ($deletedShares as $share) {
+				if ($share['shareType'] === \OCP\Share::SHARE_TYPE_GROUP) {
+					foreach (\OC_Group::usersInGroup($share['shareWith']) as $user) {
+						self::correctUsersFolder($user, $share['fileTarget']);
+					}
+				} else {
+					self::correctUsersFolder($share['shareWith'], $share['fileTarget']);
+				}
+			}
+		}
+	}
+
+	/**
+	 * update etags if file was unshared from self
+	 * @param array $params
+	 */
+	static public function postUnshareFromSelfHook($params) {
+		if ($params['itemType'] === 'file' || $params['itemType'] === 'folder') {
+			foreach ($params['unsharedItems'] as $item) {
+				if ($item['shareType'] === \OCP\Share::SHARE_TYPE_GROUP) {
+					foreach (\OC_Group::usersInGroup($item['shareWith']) as $user) {
+						self::correctUsersFolder($user, $item['fileTarget']);
+					}
+				} else {
+					self::correctUsersFolder($item['shareWith'], $item['fileTarget']);
+				}
+			}
+		}
+	}
+
+	/**
+	 * clean up oc_share table from files which are no longer exists
+	 *
+	 * This fixes issues from updates from files_sharing < 0.3.5.6 (ownCloud 4.5)
+	 * It will just be called during the update of the app
+	 */
+	static public function fixBrokenSharesOnAppUpdate() {
+		// delete all shares where the original file no longer exists
+		$findAndRemoveShares = \OCP\DB::prepare('DELETE FROM `*PREFIX*share` ' .
+			'WHERE `item_type` IN (\'file\', \'folder\') ' .
+			'AND `file_source` NOT IN (SELECT `fileid` FROM `*PREFIX*filecache`)'
+		);
+		$findAndRemoveShares->execute(array());
+	}
+
+	/**
+	 * rename mount point from the children if the parent was renamed
+	 *
+	 * @param string $oldPath old path relative to data/user/files
+	 * @param string $newPath new path relative to data/user/files
+	 */
+	static private function renameChildren($oldPath, $newPath) {
+
+		$absNewPath =  \OC\Files\Filesystem::normalizePath('/' . \OCP\User::getUser() . '/files/' . $newPath);
+		$absOldPath =  \OC\Files\Filesystem::normalizePath('/' . \OCP\User::getUser() . '/files/' . $oldPath);
+
+		$mountManager = \OC\Files\Filesystem::getMountManager();
+		$mountedShares = $mountManager->findIn('/' . \OCP\User::getUser() . '/files/' . $oldPath);
+		foreach ($mountedShares as $mount) {
+			if ($mount->getStorage()->instanceOfStorage('OCA\Files_Sharing\ISharedStorage')) {
+				$mountPoint = $mount->getMountPoint();
+				$target = str_replace($absOldPath, $absNewPath, $mountPoint);
+				$mount->moveMount($target);
 			}
 		}
 	}

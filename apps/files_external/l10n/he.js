@@ -1,0 +1,26 @@
+OC.L10N.register(
+    "files_external",
+    {
+    "Personal" : "אישי",
+    "Grant access" : "הענקת גישה",
+    "Access granted" : "הוענקה גישה",
+    "Saved" : "נשמר",
+    "None" : "כלום",
+    "Username" : "שם משתמש",
+    "Password" : "סיסמא",
+    "Port" : "פורט",
+    "Region" : "אזור",
+    "WebDAV" : "WebDAV",
+    "URL" : "כתובת",
+    "Host" : "מארח",
+    "Local" : "מקומי",
+    "Location" : "מיקום",
+    "ownCloud" : "ownCloud",
+    "Share" : "שיתוף",
+    "Name" : "שם",
+    "External Storage" : "אחסון חיצוני",
+    "Folder name" : "שם התיקייה",
+    "Configuration" : "הגדרות",
+    "Delete" : "מחיקה"
+},
+"nplurals=2; plural=(n != 1);");

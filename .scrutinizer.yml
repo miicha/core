@@ -1,0 +1,24 @@
+filter:
+    excluded_paths:
+        - '3rdparty/*'
+        - 'apps/*/3rdparty/*'
+        - 'apps/*/vendor/*'
+        - 'l10n/*'
+        - 'core/l10n/*'
+        - 'apps/*/l10n/*'
+        - 'lib/l10n/*'
+        - 'core/vendor/*'
+        - 'core/js/tests/lib/*.js'
+        - 'core/js/tests/specs/*.js'
+        - 'core/js/jquery-showpassword.js'
+        - 'core/js/jquery-tipsy.js'
+        - 'core/js/placeholders.js'
+
+
+imports:
+    - javascript
+    - php
+
+tools:
+    external_code_coverage:
+        timeout: 7200    # Timeout in seconds. 120 minutes

@@ -1,33 +1,39 @@
 <?php
-
 /**
- * ownCloud – LDAP Helper
+ * @author Arthur Schiwon <blizzz@owncloud.com>
+ * @author Brice Maron <brice@bmaron.net>
+ * @author Jörn Friedrich Dreyer <jfd@butonic.de>
+ * @author Lukas Reschke <lukas@owncloud.com>
+ * @author Morris Jobke <hey@morrisjobke.de>
+ * @author Thomas Müller <thomas.mueller@tmit.eu>
+ * @author Vincent Petry <pvince81@owncloud.com>
  *
- * @author Arthur Schiwon
- * @copyright 2013 Arthur Schiwon blizzz@owncloud.com
+ * @copyright Copyright (c) 2015, ownCloud, Inc.
+ * @license AGPL-3.0
  *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or any later version.
+ * This code is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
  *
- * This library is distributed in the hope that it will be useful,
+ * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU AFFERO GENERAL PUBLIC LICENSE for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Affero General Public
- * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Affero General Public License, version 3,
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
  *
  */
 
 namespace OCA\user_ldap\lib;
 
+use OCA\user_ldap\User_Proxy;
+
 class Helper {
 
 	/**
-	 * @brief returns prefixes for each saved LDAP/AD server configuration.
-	 * @param bool optional, whether only active configuration shall be
+	 * returns prefixes for each saved LDAP/AD server configuration.
+	 * @param bool $activeConfigurations optional, whether only active configuration shall be
 	 * retrieved, defaults to false
 	 * @return array with a list of the available prefixes
 	 *
@@ -45,21 +51,28 @@ class Helper {
 	 * except the default (first) server shall be connected to.
 	 *
 	 */
-	static public function getServerConfigurationPrefixes($activeConfigurations = false) {
+	public function getServerConfigurationPrefixes($activeConfigurations = false) {
 		$referenceConfigkey = 'ldap_configuration_active';
 
-		$query = '
+		$sql = '
 			SELECT DISTINCT `configkey`
 			FROM `*PREFIX*appconfig`
 			WHERE `appid` = \'user_ldap\'
 				AND `configkey` LIKE ?
 		';
-		if($activeConfigurations) {
-			$query .= ' AND `configvalue` = \'1\'';
-		}
-		$query = \OCP\DB::prepare($query);
 
-		$serverConfigs = $query->execute(array('%'.$referenceConfigkey))->fetchAll();
+		if($activeConfigurations) {
+			if (\OC_Config::getValue( 'dbtype', 'sqlite' ) === 'oci') {
+				//FIXME oracle hack: need to explicitly cast CLOB to CHAR for comparison
+				$sql .= ' AND to_char(`configvalue`)=\'1\'';
+			} else {
+				$sql .= ' AND `configvalue` = \'1\'';
+			}
+		}
+
+		$stmt = \OCP\DB::prepare($sql);
+
+		$serverConfigs = $stmt->execute(array('%'.$referenceConfigkey))->fetchAll();
 		$prefixes = array();
 
 		foreach($serverConfigs as $serverConfig) {
@@ -71,35 +84,131 @@ class Helper {
 	}
 
 	/**
-	 * @brief deletes a given saved LDAP/AD server configuration.
-	 * @param string the configuration prefix of the config to delete
+	 *
+	 * determines the host for every configured connection
+	 * @return array an array with configprefix as keys
+	 *
+	 */
+	public function getServerConfigurationHosts() {
+		$referenceConfigkey = 'ldap_host';
+
+		$query = '
+			SELECT DISTINCT `configkey`, `configvalue`
+			FROM `*PREFIX*appconfig`
+			WHERE `appid` = \'user_ldap\'
+				AND `configkey` LIKE ?
+		';
+		$query = \OCP\DB::prepare($query);
+		$configHosts = $query->execute(array('%'.$referenceConfigkey))->fetchAll();
+		$result = array();
+
+		foreach($configHosts as $configHost) {
+			$len = strlen($configHost['configkey']) - strlen($referenceConfigkey);
+			$prefix = substr($configHost['configkey'], 0, $len);
+			$result[$prefix] = $configHost['configvalue'];
+		}
+
+		return $result;
+	}
+
+	/**
+	 * deletes a given saved LDAP/AD server configuration.
+	 * @param string $prefix the configuration prefix of the config to delete
 	 * @return bool true on success, false otherwise
 	 */
-	static public function deleteServerConfiguration($prefix) {
-		//just to be on the safe side
-		\OCP\User::checkAdminUser();
-
+	public function deleteServerConfiguration($prefix) {
 		if(!in_array($prefix, self::getServerConfigurationPrefixes())) {
 			return false;
+		}
+
+		$saveOtherConfigurations = '';
+		if(empty($prefix)) {
+			$saveOtherConfigurations = 'AND `configkey` NOT LIKE \'s%\'';
 		}
 
 		$query = \OCP\DB::prepare('
 			DELETE
 			FROM `*PREFIX*appconfig`
 			WHERE `configkey` LIKE ?
+				'.$saveOtherConfigurations.'
 				AND `appid` = \'user_ldap\'
 				AND `configkey` NOT IN (\'enabled\', \'installed_version\', \'types\', \'bgjUpdateGroupsLastRun\')
 		');
-		$res = $query->execute(array($prefix.'%'));
+		$delRows = $query->execute(array($prefix.'%'));
 
-		if(\OCP\DB::isError($res)) {
+		if(\OCP\DB::isError($delRows)) {
 			return false;
 		}
 
-		if($res->numRows() == 0) {
+		if($delRows === 0) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * checks whether there is one or more disabled LDAP configurations
+	 * @throws \Exception
+	 * @return bool
+	 */
+	public function haveDisabledConfigurations() {
+		$all = $this->getServerConfigurationPrefixes(false);
+		$active = $this->getServerConfigurationPrefixes(true);
+
+		if(!is_array($all) || !is_array($active)) {
+			throw new \Exception('Unexpected Return Value');
+		}
+
+		return count($all) !== count($active) || count($all) === 0;
+	}
+
+	/**
+	 * extracts the domain from a given URL
+	 * @param string $url the URL
+	 * @return string|false domain as string on success, false otherwise
+	 */
+	public function getDomainFromURL($url) {
+		$uinfo = parse_url($url);
+		if(!is_array($uinfo)) {
+			return false;
+		}
+
+		$domain = false;
+		if(isset($uinfo['host'])) {
+			$domain = $uinfo['host'];
+		} else if(isset($uinfo['path'])) {
+			$domain = $uinfo['path'];
+		}
+
+		return $domain;
+	}
+
+	/**
+	 * listens to a hook thrown by server2server sharing and replaces the given
+	 * login name by a username, if it matches an LDAP user.
+	 *
+	 * @param array $param
+	 * @throws \Exception
+	 */
+	public static function loginName2UserName($param) {
+		if(!isset($param['uid'])) {
+			throw new \Exception('key uid is expected to be set in $param');
+		}
+
+		//ain't it ironic?
+		$helper = new Helper();
+
+		$configPrefixes = $helper->getServerConfigurationPrefixes(true);
+		$ldapWrapper = new LDAP();
+		$ocConfig = \OC::$server->getConfig();
+
+		$userBackend  = new User_Proxy(
+			$configPrefixes, $ldapWrapper, $ocConfig
+		);
+		$uid = $userBackend->loginName2UserName($param['uid'] );
+		if($uid !== false) {
+			$param['uid'] = $uid;
+		}
 	}
 }

@@ -1,7 +1,8 @@
 /**
  * jQuery plugin for micro templates
  *
- * Strings are automatically escaped, but that can be disabled by setting escapeFunction to null.
+ * Strings are automatically escaped, but that can be disabled by setting
+ * escapeFunction to null.
  *
  * Usage examples:
  *
@@ -11,13 +12,15 @@
  * 	var htmlStr = '<p>Welcome back {user}</p>';
  *	$(htmlStr).octemplate({user: 'John Q. Public'}, {escapeFunction: null});
  *
- * Be aware that the target string must be wrapped in an HTML element for the plugin to work. The following won't work:
+ * Be aware that the target string must be wrapped in an HTML element for the
+ * plugin to work. The following won't work:
  * 
  *      var textStr = 'Welcome back {user}';
  *      $(textStr).octemplate({user: 'John Q. Public'});
  *
- * For anything larger than one-liners, you can use a simple $.get() ajax request to get the template,
- * or you can embed them it the page using the text/template type:
+ * For anything larger than one-liners, you can use a simple $.get() ajax
+ * request to get the template, or you can embed them it the page using the
+ * text/template type:
  *
  * <script id="contactListItemTemplate" type="text/template">
  *	<tr class="contact" data-id="{id}">
@@ -60,11 +63,12 @@
 			var self = this;
 
 			if(typeof this.options.escapeFunction === 'function') {
-				$.each(this.vars, function(key, val) {
-					if(typeof val === 'string') {
-						self.vars[key] = self.options.escapeFunction(val);
+				var keys = Object.keys(this.vars);
+				for (var key = 0; key < keys.length; key++) {
+					if(typeof this.vars[keys[key]] === 'string') {
+						this.vars[keys[key]] = self.options.escapeFunction(this.vars[keys[key]]);
 					}
-				});
+				}
 			}
 
 			var _html = this._build(this.vars);
@@ -72,7 +76,7 @@
 		},
 		// From stackoverflow.com/questions/1408289/best-way-to-do-variable-interpolation-in-javascript
 		_build: function(o){
-			var data = this.elem.attr('type') === 'text/template' ? this.elem.html() : this.elem.get(0).outerHTML;
+			var data = this.elem.attr('type') === 'text/template' ? this.elem.html() : outerHTML(this.elem.get(0));
 			try {
 				return data.replace(/{([^{}]*)}/g,
 					function (a, b) {
@@ -81,11 +85,11 @@
 					}
 				);
 			} catch(e) {
-				console.error(e, 'data:', data)
+				console.error(e, 'data:', data);
 			}
 		},
 		options: {
-			escapeFunction: function(str) {return $('<i></i>').text(str).html();}
+			escapeFunction: escapeHTML
 		}
 	};
 

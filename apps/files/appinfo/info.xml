@@ -4,17 +4,18 @@
 	<name>Files</name>
 	<description>File Management</description>
 	<licence>AGPL</licence>
-	<author>Robin Appelman</author>
-	<require>4.93</require>
+	<author>Robin Appelman, Vincent Petry</author>
 	<shipped>true</shipped>
 	<standalone/>
 	<default_enable/>
+	<version>1.4.0</version>
 	<types>
 		<filesystem/>
 	</types>
-	<remote>
-		<files>appinfo/remote.php</files>
-		<webdav>appinfo/remote.php</webdav>
-		<filesync>appinfo/filesync.php</filesync>
-	</remote>
+	<dependencies>
+		<owncloud min-version="9.0" />
+	</dependencies>
+	<documentation>
+		<user>user-files</user>
+	</documentation>
 </info>

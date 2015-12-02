@@ -1,10 +1,17 @@
 (function ($) {
 	$.fn.singleSelect = function () {
 		return this.each(function (i, select) {
-			var input = $('<input/>');
+			var input = $('<input/>'),
+				gravity = $(select).attr('data-tipsy-gravity'),
+				inputTooltip = $(select).attr('data-inputtitle');
+			if (inputTooltip){
+				input.attr('title', inputTooltip);
+			}
+			if (typeof gravity === 'undefined') {
+				gravity = 'n'
+			}
 			select = $(select);
 			input.css('position', 'absolute');
-			input.css(select.offset());
 			input.css({
 				'box-sizing': 'border-box',
 				'-moz-box-sizing': 'border-box',
@@ -28,7 +35,13 @@
 					select.data('previous', value);
 				} else {
 					event.stopImmediatePropagation();
+					// adjust offset, in case the user scrolled
+					input.css(select.offset());
 					input.show();
+					if ($.fn.tipsy){
+						input.tipsy({gravity: gravity, trigger: 'manual'});
+						input.tipsy('show');
+					}
 					select.css('background-color', 'white');
 					input.focus();
 				}
@@ -70,7 +83,14 @@
 
 			input.on('blur', function () {
 				$(this).change();
+				if ($.fn.tipsy){
+					$(this).tipsy('hide');
+				}
+			});
+			input.click(function(ev) {
+				// prevent clicks to close any container
+				ev.stopPropagation();
 			});
 		});
-	}
+	};
 })(jQuery);

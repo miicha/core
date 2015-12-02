@@ -1,71 +1,94 @@
 <?php
+/**
+ * @author Bart Visscher <bartv@thisnet.nl>
+ * @author Jörn Friedrich Dreyer <jfd@butonic.de>
+ * @author Lukas Reschke <lukas@owncloud.com>
+ * @author Robin Appelman <icewind@owncloud.com>
+ * @author Vincent Petry <pvince81@owncloud.com>
+ *
+ * @copyright Copyright (c) 2015, ownCloud, Inc.
+ * @license AGPL-3.0
+ *
+ * This code is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License, version 3,
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ *
+ */
 set_time_limit(0); //scanning can take ages
-session_write_close();
+
+\OCP\JSON::checkLoggedIn();
+\OCP\JSON::callCheck();
+
+\OC::$server->getSession()->close();
 
 $force = (isset($_GET['force']) and ($_GET['force'] === 'true'));
-$dir = isset($_GET['dir']) ? $_GET['dir'] : '';
+$dir = isset($_GET['dir']) ? (string)$_GET['dir'] : '';
+if (isset($_GET['users'])) {
+	\OCP\JSON::checkAdminUser();
+	if ($_GET['users'] === 'all') {
+		$users = OC_User::getUsers();
+	} else {
+		$users = json_decode($_GET['users']);
+	}
+} else {
+	$users = array(OC_User::getUser());
+}
 
-$eventSource = new OC_EventSource();
-ScanListener::$eventSource = $eventSource;
-ScanListener::$view = \OC\Files\Filesystem::getView();
+$eventSource = \OC::$server->createEventSource();
+$listener = new ScanListener($eventSource);
 
-OC_Hook::connect('\OC\Files\Cache\Scanner', 'scan_folder', 'ScanListener', 'folder');
-OC_Hook::connect('\OC\Files\Cache\Scanner', 'scan_file', 'ScanListener', 'file');
-
-$absolutePath = \OC\Files\Filesystem::getView()->getAbsolutePath($dir);
-
-$mountPoints = \OC\Files\Filesystem::getMountPoints($absolutePath);
-$mountPoints[] = \OC\Files\Filesystem::getMountPoint($absolutePath);
-$mountPoints = array_reverse($mountPoints); //start with the mount point of $dir
-
-foreach ($mountPoints as $mountPoint) {
-	$storage = \OC\Files\Filesystem::getStorage($mountPoint);
-	if ($storage) {
-		ScanListener::$mountPoints[$storage->getId()] = $mountPoint;
-		$scanner = $storage->getScanner();
+foreach ($users as $user) {
+	$eventSource->send('user', $user);
+	$scanner = new \OC\Files\Utils\Scanner($user, \OC::$server->getDatabaseConnection(), \OC::$server->getLogger());
+	$scanner->listen('\OC\Files\Utils\Scanner', 'scanFile', array($listener, 'file'));
+	try {
 		if ($force) {
-			$scanner->scan('');
+			$scanner->scan($dir);
 		} else {
-			$scanner->backgroundScan();
+			$scanner->backgroundScan($dir);
 		}
+	} catch (\Exception $e) {
+		$eventSource->send('error', get_class($e) . ': ' . $e->getMessage());
 	}
 }
 
-$eventSource->send('done', ScanListener::$fileCount);
+$eventSource->send('done', $listener->getCount());
 $eventSource->close();
 
 class ScanListener {
 
-	static public $fileCount = 0;
-	static public $lastCount = 0;
+	private $fileCount = 0;
+	private $lastCount = 0;
 
 	/**
-	 * @var \OC\Files\View $view
+	 * @var \OCP\IEventSource event source to pass events to
 	 */
-	static public $view;
+	private $eventSource;
 
 	/**
-	 * @var array $mountPoints map storage ids to mountpoints
+	 * @param \OCP\IEventSource $eventSource
 	 */
-	static public $mountPoints = array();
-
-	/**
-	 * @var \OC_EventSource event source to pass events to
-	 */
-	static public $eventSource;
-
-	static function folder($params) {
-		$internalPath = $params['path'];
-		$mountPoint = self::$mountPoints[$params['storage']];
-		$path = self::$view->getRelativePath($mountPoint . $internalPath);
-		self::$eventSource->send('folder', $path);
+	public function __construct($eventSource) {
+		$this->eventSource = $eventSource;
 	}
 
-	static function file() {
-		self::$fileCount++;
-		if (self::$fileCount > self::$lastCount + 20) { //send a count update every 20 files
-			self::$lastCount = self::$fileCount;
-			self::$eventSource->send('count', self::$fileCount);
+	public function file() {
+		$this->fileCount++;
+		if ($this->fileCount > $this->lastCount + 20) { //send a count update every 20 files
+			$this->lastCount = $this->fileCount;
+			$this->eventSource->send('count', $this->fileCount);
 		}
+	}
+
+	public function getCount() {
+		return $this->fileCount;
 	}
 }

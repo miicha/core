@@ -20,7 +20,26 @@
  *
  */
 
-class Test_StreamWrappers extends PHPUnit_Framework_TestCase {
+/**
+ * Class Test_StreamWrappers
+ *
+ * @group DB
+ */
+class Test_StreamWrappers extends \Test\TestCase {
+
+	private static $trashBinStatus;
+
+	public static function setUpBeforeClass() {
+		self::$trashBinStatus = \OC_App::isEnabled('files_trashbin');
+		\OC_App::disable('files_trashbin');
+	}
+
+	public static function tearDownAfterClass() {
+		if (self::$trashBinStatus) {
+			\OC_App::enable('files_trashbin');
+		}
+	}
+
 	public function testFakeDir() {
 		$items = array('foo', 'bar');
 		\OC\Files\Stream\Dir::register('test', $items);
@@ -31,18 +50,6 @@ class Test_StreamWrappers extends PHPUnit_Framework_TestCase {
 			$this->assertContains($file, $items);
 		}
 		$this->assertEquals(count($items), count($result));
-	}
-
-	public function testStaticStream() {
-		$sourceFile = OC::$SERVERROOT . '/tests/data/lorem.txt';
-		$staticFile = 'static://test';
-		$this->assertFalse(file_exists($staticFile));
-		file_put_contents($staticFile, file_get_contents($sourceFile));
-		$this->assertTrue(file_exists($staticFile));
-		$this->assertEquals(file_get_contents($sourceFile), file_get_contents($staticFile));
-		unlink($staticFile);
-		clearstatcache();
-		$this->assertFalse(file_exists($staticFile));
 	}
 
 	public function testCloseStream() {
@@ -60,27 +67,24 @@ class Test_StreamWrappers extends PHPUnit_Framework_TestCase {
 		//test callback
 		$tmpFile = OC_Helper::TmpFile('.txt');
 		$file = 'close://' . $tmpFile;
-		\OC\Files\Stream\Close::registerCallback($tmpFile, array('Test_StreamWrappers', 'closeCallBack'));
+		$actual = false;
+		$callback = function($path) use (&$actual) { $actual = $path; };
+		\OC\Files\Stream\Close::registerCallback($tmpFile, $callback);
 		$fh = fopen($file, 'w');
 		fwrite($fh, 'asd');
-		try {
-			fclose($fh);
-			$this->fail('Expected exception');
-		} catch (Exception $e) {
-			$path = $e->getMessage();
-			$this->assertEquals($path, $tmpFile);
-		}
-	}
-
-	public static function closeCallBack($path) {
-		throw new Exception($path);
+		fclose($fh);
+		$this->assertSame($tmpFile, $actual);
 	}
 
 	public function testOC() {
-		\OC\Files\Mount::clear();
+		// FIXME: use proper tearDown with $this->loginAsUser() and $this->logout()
+		// (would currently break the tests for some reason)
+		$originalStorage = \OC\Files\Filesystem::getStorage('/');
+		\OC\Files\Filesystem::clearMounts();
+
 		$storage = new \OC\Files\Storage\Temporary(array());
 		$storage->file_put_contents('foo.txt', 'asd');
-		new \OC\Files\Mount($storage, '/');
+		\OC\Files\Filesystem::mount($storage, array(), '/');
 
 		$this->assertTrue(file_exists('oc:///foo.txt'));
 		$this->assertEquals('asd', file_get_contents('oc:///foo.txt'));
@@ -91,7 +95,20 @@ class Test_StreamWrappers extends PHPUnit_Framework_TestCase {
 		$this->assertEquals(array('.', '..', 'bar.txt', 'foo.txt'), scandir('oc:///'));
 		$this->assertEquals('qwerty', file_get_contents('oc:///bar.txt'));
 
+		$fh = fopen('oc:///bar.txt', 'rb');
+		$this->assertSame(0, ftell($fh));
+		$content = fread($fh, 4);
+		$this->assertSame(4, ftell($fh));
+		$this->assertSame('qwer', $content);
+		$content = fread($fh, 1);
+		$this->assertSame(5, ftell($fh));
+		$this->assertSame(0, fseek($fh, 0));
+		$this->assertSame(0, ftell($fh));
+
 		unlink('oc:///foo.txt');
 		$this->assertEquals(array('.', '..', 'bar.txt'), scandir('oc:///'));
+
+		\OC\Files\Filesystem::clearMounts();
+		\OC\Files\Filesystem::mount($originalStorage, array(), '/');
 	}
 }

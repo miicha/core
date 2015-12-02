@@ -24,7 +24,7 @@ if (typeof Object.keys !== 'function') {
 			}
 		}
 		return k;
-	}
+	};
 }
 
 /**
@@ -42,8 +42,9 @@ if (!Array.prototype.filter) {
 		for (var i = 0; i < len; i++) {
 			if (i in this) {
 				var val = this[i]; // in case fun mutates this
-				if (fun.call(thisp, val, i, this))
+				if (fun.call(thisp, val, i, this)) {
 					res.push(val);
+				}
 			}
 		}
 		return res;
@@ -134,3 +135,21 @@ if(!String.prototype.trim) {
 		return this.replace(/^\s+|\s+$/g,'');
 	};
 }
+
+// Older Firefoxes doesn't support outerHTML
+// From http://stackoverflow.com/questions/1700870/how-do-i-do-outerhtml-in-firefox#answer-3819589
+function outerHTML(node){
+	// In newer browsers use the internal property otherwise build a wrapper.
+	return node.outerHTML || (
+	function(n){
+		var div = document.createElement('div'), h;
+		div.appendChild( n.cloneNode(true) );
+		h = div.innerHTML;
+		div = null;
+		return h;
+	})(node);
+}
+
+// devicePixelRatio for IE10
+window.devicePixelRatio = window.devicePixelRatio ||
+	window.screen.deviceXDPI / window.screen.logicalXDPI || 1;

@@ -9,7 +9,7 @@
 
  <table>
 
-  <name>*dbprefix*contacts_addressbooks</name>
+  <name>*dbprefix*cntcts_addrsbks</name>
 
   <declaration>
 
@@ -49,8 +49,9 @@
 
    <field>
     <name>description</name>
-    <type>clob</type>
+    <type>text</type>
     <notnull>false</notnull>
+    <length>1024</length>
    </field>
 
    <field>
@@ -73,5 +74,64 @@
   </declaration>
 
  </table>
+
+ <table>
+  <name>*dbprefix*timestamp</name>
+  <declaration>
+   <field>
+    <name>id</name>
+    <autoincrement>1</autoincrement>
+    <type>integer</type>
+    <default>0</default>
+    <notnull>true</notnull>
+    <length>4</length>
+   </field>
+
+   <field>
+    <name>timestamptest</name>
+    <type>timestamp</type>
+    <default></default>
+    <notnull>false</notnull>
+   </field>
+  </declaration>
+ </table>
+
+ <table>
+  <name>*dbprefix*decimal</name>
+  <declaration>
+   <field>
+    <name>id</name>
+    <autoincrement>1</autoincrement>
+    <type>integer</type>
+    <default>0</default>
+    <notnull>true</notnull>
+    <length>4</length>
+   </field>
+
+   <field>
+    <name>decimaltest</name>
+    <type>decimal</type>
+    <default/>
+    <notnull>true</notnull>
+    <precision>12</precision>
+    <scale>2</scale>
+   </field>
+  </declaration>
+ </table>
+
+	<table>
+		<name>*dbprefix*migratekeyword</name>
+
+		<declaration>
+
+			<field>
+				<name>select</name>
+				<type>text</type>
+				<default></default>
+				<notnull>false</notnull>
+				<length>255</length>
+			</field>
+		</declaration>
+	</table>
 
 </database>

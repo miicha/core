@@ -1,20 +1,24 @@
 [main]
-host = https://www.transifex.net
+host = https://www.transifex.com
+lang_map = ja_JP: ja
 
 [owncloud.core]
 file_filter = <lang>/core.po
 source_file = templates/core.pot
 source_lang = en
+type = PO
 
 [owncloud.files]
 file_filter = <lang>/files.po
 source_file = templates/files.pot
 source_lang = en
+type = PO
 
-[owncloud.settings]
+[owncloud.settings-1]
 file_filter = <lang>/settings.po
 source_file = templates/settings.pot
 source_lang = en
+type = PO
 
 [owncloud.lib]
 file_filter = <lang>/lib.po
@@ -23,8 +27,8 @@ source_lang = en
 type = PO
 
 [owncloud.files_encryption]
-file_filter = <lang>/files_encryption.po
-source_file = templates/files_encryption.pot
+file_filter = <lang>/encryption.po
+source_file = templates/encryption.pot
 source_lang = en
 type = PO
 
@@ -55,12 +59,6 @@ type = PO
 [owncloud.user_ldap]
 file_filter = <lang>/user_ldap.po
 source_file = templates/user_ldap.pot
-source_lang = en
-type = PO
-
-[owncloud.user_webdavauth]
-file_filter = <lang>/user_webdavauth.po
-source_file = templates/user_webdavauth.pot
 source_lang = en
 type = PO
 

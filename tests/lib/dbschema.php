@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Copyright (c) 2012 Bart Visscher <bartv@thisnet.nl>
  * This file is licensed under the Affero General Public License version 3 or
@@ -6,37 +7,51 @@
  * See the COPYING-README file.
  */
 
-class Test_DBSchema extends PHPUnit_Framework_TestCase {
-	protected static $schema_file = 'static://test_db_scheme';
-	protected static $schema_file2 = 'static://test_db_scheme2';
-	protected $test_prefix;
+use OCP\Security\ISecureRandom;
+
+/**
+ * Class Test_DBSchema
+ *
+ * @group DB
+ */
+class Test_DBSchema extends \Test\TestCase {
+	protected $schema_file = 'static://test_db_scheme';
+	protected $schema_file2 = 'static://test_db_scheme2';
 	protected $table1;
 	protected $table2;
 
-	public function setUp() {
+	protected function setUp() {
+		parent::setUp();
+
 		$dbfile = OC::$SERVERROOT.'/tests/data/db_structure.xml';
 		$dbfile2 = OC::$SERVERROOT.'/tests/data/db_structure2.xml';
 
-		$r = '_'.OC_Util::generate_random_bytes('4').'_';
+		$r = '_' . \OC::$server->getSecureRandom()->getMediumStrengthGenerator()->
+			generate(4, ISecureRandom::CHAR_LOWER . ISecureRandom::CHAR_DIGITS) . '_';
 		$content = file_get_contents( $dbfile );
 		$content = str_replace( '*dbprefix*', '*dbprefix*'.$r, $content );
-		file_put_contents( self::$schema_file, $content );
+		file_put_contents( $this->schema_file, $content );
 		$content = file_get_contents( $dbfile2 );
 		$content = str_replace( '*dbprefix*', '*dbprefix*'.$r, $content );
-		file_put_contents( self::$schema_file2, $content );
+		file_put_contents( $this->schema_file2, $content );
 
-		$this->test_prefix = $r;
-		$this->table1 = $this->test_prefix.'contacts_addressbooks';
-		$this->table2 = $this->test_prefix.'contacts_cards';
+		$this->table1 = $r.'cntcts_addrsbks';
+		$this->table2 = $r.'cntcts_cards';
 	}
 
-	public function tearDown() {
-		unlink(self::$schema_file);
-		unlink(self::$schema_file2);
+	protected function tearDown() {
+		unlink($this->schema_file);
+		unlink($this->schema_file2);
+
+		parent::tearDown();
 	}
 
 	// everything in one test, they depend on each other
+	/**
+	 * @medium
+	 */
 	public function testSchema() {
+		$platform = \OC_DB::getConnection()->getDatabasePlatform();
 		$this->doTestSchemaCreating();
 		$this->doTestSchemaChanging();
 		$this->doTestSchemaDumping();
@@ -44,13 +59,13 @@ class Test_DBSchema extends PHPUnit_Framework_TestCase {
 	}
 
 	public function doTestSchemaCreating() {
-		OC_DB::createDbFromStructure(self::$schema_file);
+		OC_DB::createDbFromStructure($this->schema_file);
 		$this->assertTableExist($this->table1);
 		$this->assertTableExist($this->table2);
 	}
 
 	public function doTestSchemaChanging() {
-		OC_DB::updateDbFromStructure(self::$schema_file2);
+		OC_DB::updateDbFromStructure($this->schema_file2);
 		$this->assertTableExist($this->table2);
 	}
 
@@ -63,62 +78,28 @@ class Test_DBSchema extends PHPUnit_Framework_TestCase {
 	}
 
 	public function doTestSchemaRemoving() {
-		OC_DB::removeDBStructure(self::$schema_file);
+		OC_DB::removeDBStructure($this->schema_file);
 		$this->assertTableNotExist($this->table1);
 		$this->assertTableNotExist($this->table2);
 	}
 
-	public function tableExist($table) {
-		$table = '*PREFIX*' . $table;
-
-		switch (OC_Config::getValue( 'dbtype', 'sqlite' )) {
-			case 'sqlite':
-			case 'sqlite3':
-				$sql = "SELECT name FROM sqlite_master "
-				. "WHERE type = 'table' AND name != 'sqlite_sequence' "
-				.  "AND name != 'geometry_columns' AND name != 'spatial_ref_sys' "
-				. "UNION ALL SELECT name FROM sqlite_temp_master "
-				. "WHERE type = 'table' AND name = '".$table."'";
-				$query = OC_DB::prepare($sql);
-				$result = $query->execute(array());
-				$exists = $result && $result->fetchOne();
-				break;
-			case 'mysql':
-				$sql = 'SHOW TABLES LIKE "'.$table.'"';
-				$query = OC_DB::prepare($sql);
-				$result = $query->execute(array());
-				$exists = $result && $result->fetchOne();
-				break;
-			case 'pgsql':
-				$sql = "SELECT tablename AS table_name, schemaname AS schema_name "
-					. "FROM pg_tables WHERE schemaname NOT LIKE 'pg_%' "
-					.  "AND schemaname != 'information_schema' "
-					.  "AND tablename = '".$table."'";
-				$query = OC_DB::prepare($sql);
-				$result = $query->execute(array());
-				$exists = $result && $result->fetchOne();
-				break;
-			case 'mssql':
-				$sql = "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{$table}'";
-				$query = OC_DB::prepare($sql);
-				$result = $query->execute(array());
-				$exists = $result && $result->fetchOne();
-				break;
-		}
-		return $exists;
-	}
-
+	/**
+	 * @param string $table
+	 */
 	public function assertTableExist($table) {
-		$this->assertTrue($this->tableExist($table));
+		$this->assertTrue(OC_DB::tableExists($table), 'Table ' . $table . ' does not exist');
 	}
 
+	/**
+	 * @param string $table
+	 */
 	public function assertTableNotExist($table) {
-		$type=OC_Config::getValue( "dbtype", "sqlite" );
-		if( $type == 'sqlite' || $type == 'sqlite3' ) {
+		$platform = \OC_DB::getConnection()->getDatabasePlatform();
+		if ($platform instanceof \Doctrine\DBAL\Platforms\SqlitePlatform) {
 			// sqlite removes the tables after closing the DB
-		}
-		else {
-			$this->assertFalse($this->tableExist($table));
+			$this->assertTrue(true);
+		} else {
+			$this->assertFalse(OC_DB::tableExists($table), 'Table ' . $table . ' exists.');
 		}
 	}
 }
